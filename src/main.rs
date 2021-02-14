@@ -8,13 +8,23 @@ fn main() {
 
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer).expect("Error reading from STDIN");
-    let obj: FaasInput = serde_json::from_str(&buffer).unwrap();
+    // println!("buffer is {:?}", buffer);
+    let input: FaasInput = serde_json::from_str(&buffer).unwrap();
+    // println!("obj is {:?}", input);
+    let obj: InputParams = serde_json::from_str(&input.body).unwrap();
     // println!("{} {}", &(obj.body)[..5], obj.body.len());
-    let img_buf = base64::decode_config(&(obj.body), base64::STANDARD).unwrap();
+    let img_buf = base64::decode_config(&(obj.img), base64::STANDARD).unwrap();
     // println!("Image buf size is {}", img_buf.len());
 
-    let flat_img = ssvm_tensorflow_interface::load_jpg_image_to_rgb8(&img_buf, 192, 192);
-
+    let mut flat_img;
+    if obj.extension == "jpg" || obj.extension == "jpeg" {
+        //println!("jpg");
+        flat_img = ssvm_tensorflow_interface::load_jpg_image_to_rgb8(&img_buf, 192, 192);
+    } else {
+        //println!("png");
+        flat_img = ssvm_tensorflow_interface::load_png_image_to_rgb8(&img_buf, 192, 192);
+    }
+    // println!("flat_img buf size is {}", flat_img.len());
     let mut session = ssvm_tensorflow_interface::Session::new(&model_data, ssvm_tensorflow_interface::ModelType::TensorFlowLite);
     session.add_input("input", &flat_img, &[1, 192, 192, 3])
            .run();
@@ -31,18 +41,7 @@ fn main() {
         }
         i += 1;
     }
-    // println!("{} : {}", max_index, max_value as f32 / 255.0);
 
-    /*
-    let mut confidence = "could be";
-    if max_value > 200 {
-        confidence = "is very likely";
-    } else if max_value > 125 {
-        confidence = "is likely";
-    } else if max_value > 50 {
-        confidence = "could be";
-    }
-    */
     let mut confidence = "可能有";
     if max_value > 200 {
         confidence = "非常可能有";
@@ -60,7 +59,7 @@ fn main() {
     let class_name = label_lines.next().unwrap().to_string();
     if max_value > 50 && max_index != 0 {
       // println!("It {} a <a href='https://www.google.com/search?q={}'>{}</a> in the picture", confidence.to_string(), class_name, class_name);
-      println!("上传的图片里面{} <a href='https://www.google.com/search?q={}'>{}</a>", confidence.to_string(), class_name, class_name);
+      println!("经过AI检测，上传的图片里面{} <a href='https://www.google.com/search?q={}'>{}</a>", confidence.to_string(), class_name, class_name);
     } else {
       // println!("It does not appears to be any food item in the picture.");
       println!("上传的图片里面没有检测到食品");
@@ -71,4 +70,10 @@ fn main() {
 #[derive(Deserialize, Debug)]
 struct FaasInput {
     body: String
+}
+
+#[derive(Deserialize, Debug)]
+struct InputParams {
+    img: String,
+    extension: String
 }
